@@ -16,14 +16,14 @@ public class DataRetriever {
 
         String sql = """
                 SELECT
-                    i.id                                AS invoice_id,
-                    i.customer_name,
-                    i.status::TEXT                      AS status,
-                    SUM(il.quantity * il.unit_price)    AS total
-                FROM invoice i
-                JOIN invoice_line il ON il.invoice_id = i.id
-                GROUP BY i.id, i.customer_name, i.status
-                ORDER BY i.id
+                    invoice.id,
+                    invoice.customer_name,
+                    invoice.status::TEXT,
+                    SUM(invoice_line.quantity * invoice_line.unit_price)
+                FROM invoice
+                JOIN invoice_line ON invoice_line.invoice_id = invoice.id
+                GROUP BY invoice.id, invoice.customer_name, invoice.status
+                ORDER BY invoice.id
                 """;
 
         List<InvoiceTotal> results = new ArrayList<>();
@@ -34,10 +34,10 @@ public class DataRetriever {
 
             while (rs.next()) {
                 results.add(new InvoiceTotal(
-                        rs.getInt("invoice_id"),
+                        rs.getInt("id"),
                         rs.getString("customer_name"),
                         rs.getString("status"),
-                        rs.getBigDecimal("total").setScale(2)
+                        rs.getBigDecimal("sum").setScale(2)
                 ));
             }
 
@@ -48,5 +48,113 @@ public class DataRetriever {
         }
 
         return results;
+    }
+
+    public List<InvoiceTotal> findConfirmedAndPaidInvoiceTotals() {
+
+        String sql = """
+                SELECT
+                    invoice.id,
+                    invoice.customer_name,
+                    invoice.status::TEXT,
+                    SUM(invoice_line.quantity * invoice_line.unit_price)
+                FROM invoice
+                JOIN invoice_line ON invoice_line.invoice_id = invoice.id
+                WHERE invoice.status = 'CONFIRMED' OR invoice.status = 'PAID'
+                GROUP BY invoice.id, invoice.customer_name, invoice.status
+                ORDER BY invoice.id
+                """;
+
+        List<InvoiceTotal> results = new ArrayList<>();
+        Connection conn = dbConnection.getDBConnection();
+
+        try (PreparedStatement ps = conn.prepareStatement(sql);
+             ResultSet rs = ps.executeQuery()) {
+
+            while (rs.next()) {
+                results.add(new InvoiceTotal(
+                        rs.getInt("id"),
+                        rs.getString("customer_name"),
+                        rs.getString("status"),
+                        rs.getBigDecimal("sum").setScale(2)
+                ));
+            }
+
+        } catch (SQLException e) {
+            throw new RuntimeException("Erreur findConfirmedAndPaidInvoiceTotals", e);
+        } finally {
+            dbConnection.closeConnection(conn);
+        }
+
+        return results;
+    }
+
+    public InvoiceStatusTotals computeStatusTotals() {
+
+        String sql = """
+                SELECT
+                    SUM(invoice_line.quantity * invoice_line.unit_price)
+                        FILTER (WHERE invoice.status = 'PAID')      AS total_paid,
+                    SUM(invoice_line.quantity * invoice_line.unit_price)
+                        FILTER (WHERE invoice.status = 'CONFIRMED') AS total_confirmed,
+                    SUM(invoice_line.quantity * invoice_line.unit_price)
+                        FILTER (WHERE invoice.status = 'DRAFT')     AS total_draft
+                FROM invoice
+                JOIN invoice_line ON invoice_line.invoice_id = invoice.id
+                """;
+
+        Connection conn = dbConnection.getDBConnection();
+
+        try (PreparedStatement ps = conn.prepareStatement(sql);
+             ResultSet rs = ps.executeQuery()) {
+
+            if (rs.next()) {
+                return new InvoiceStatusTotals(
+                        rs.getBigDecimal("total_paid").setScale(2),
+                        rs.getBigDecimal("total_confirmed").setScale(2),
+                        rs.getBigDecimal("total_draft").setScale(2)
+                );
+            }
+
+        } catch (SQLException e) {
+            throw new RuntimeException("Erreur computeStatusTotals", e);
+        } finally {
+            dbConnection.closeConnection(conn);
+        }
+
+        return null;
+    }
+
+    public Double computeWeightedTurnover() {
+
+        String sql = """
+                SELECT
+                    SUM(invoice_line.quantity * invoice_line.unit_price *
+                        CASE invoice.status
+                            WHEN 'PAID'      THEN 1.0
+                            WHEN 'CONFIRMED' THEN 0.5
+                            ELSE 0.0
+                        END
+                    ) AS weighted_turnover
+                FROM invoice
+                JOIN invoice_line ON invoice_line.invoice_id = invoice.id
+                """;
+
+        Connection conn = dbConnection.getDBConnection();
+
+        try (PreparedStatement ps = conn.prepareStatement(sql);
+             ResultSet rs = ps.executeQuery()) {
+
+            if (rs.next()) {
+                return rs.getDouble("weighted_turnover");
+            }
+
+        } catch (SQLException e) {
+            throw new RuntimeException("Erreur computeWeightedTurnover", e);
+        } finally {
+            dbConnection.closeConnection(conn);
+        }
+
+        return 0.0;
     }
 }
