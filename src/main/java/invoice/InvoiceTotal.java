@@ -9,6 +9,13 @@ public class InvoiceTotal {
     private final String status;
     private final BigDecimal total;
 
+    public InvoiceTotal(int invoiceId, String customerName, BigDecimal total) {
+        this.invoiceId    = invoiceId;
+        this.customerName = customerName;
+        this.status       = null;
+        this.total        = total;
+    }
+
     public InvoiceTotal(int invoiceId, String customerName, String status, BigDecimal total) {
         this.invoiceId    = invoiceId;
         this.customerName = customerName;
@@ -23,7 +30,9 @@ public class InvoiceTotal {
 
     @Override
     public String toString() {
-        return String.format("%d | %s | %s | %.2f",
-                invoiceId, customerName, status, total);
+        if (status == null) {
+            return String.format("%d | %s | %.2f", invoiceId, customerName, total);
+        }
+        return String.format("%d | %s | %s | %.2f", invoiceId, customerName, status, total);
     }
 }

@@ -13,18 +13,16 @@ public class DataRetriever {
         this.dbConnection = new DBConnection();
     }
 
-
     public List<InvoiceTotal> findInvoiceTotals() {
 
         String sql = """
                 SELECT
                     invoice.id,
                     invoice.customer_name,
-                    invoice.status::TEXT,
                     SUM(invoice_line.quantity * invoice_line.unit_price)
                 FROM invoice
                 JOIN invoice_line ON invoice_line.invoice_id = invoice.id
-                GROUP BY invoice.id, invoice.customer_name, invoice.status
+                GROUP BY invoice.id, invoice.customer_name
                 ORDER BY invoice.id
                 """;
 
@@ -38,7 +36,6 @@ public class DataRetriever {
                 results.add(new InvoiceTotal(
                         rs.getInt("id"),
                         rs.getString("customer_name"),
-                        rs.getString("status"),
                         rs.getBigDecimal("sum").setScale(2)
                 ));
             }
@@ -165,8 +162,8 @@ public class DataRetriever {
         String sql = """
                 SELECT
                     invoice.id,
-                    SUM(invoice_line.quantity * invoice_line.unit_price)                         AS total_ht,
-                    SUM(invoice_line.quantity * invoice_line.unit_price) * tax_config.rate / 100 AS total_tva,
+                    SUM(invoice_line.quantity * invoice_line.unit_price)                              AS total_ht,
+                    SUM(invoice_line.quantity * invoice_line.unit_price) * tax_config.rate / 100      AS total_tva,
                     SUM(invoice_line.quantity * invoice_line.unit_price) * (1 + tax_config.rate / 100) AS total_ttc
                 FROM invoice
                 JOIN invoice_line ON invoice_line.invoice_id = invoice.id
@@ -198,7 +195,6 @@ public class DataRetriever {
 
         return results;
     }
-
 
     public BigDecimal computeWeightedTurnoverTtc() {
 
@@ -235,5 +231,4 @@ public class DataRetriever {
 
         return BigDecimal.ZERO.setScale(2);
     }
-
 }
